@@ -1203,7 +1203,7 @@ footer {
     height: 100%;
     min-height: 220px;
     object-fit: cover;
-    object-position: center center; /* keep the image centered vertically/horizontally */
+    object-position: center 55%; /* slightly lower vertical alignment */
     display: block;
 }
 
