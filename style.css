@@ -1141,7 +1141,7 @@ footer {
 .newsletter-card-inner {
     display: flex;
     flex-direction: row;
-    align-items: stretch;
+    align-items: center; /* centers image + text vertically */
     min-height: 220px;
     gap: 28px;
 }
