@@ -133,6 +133,18 @@ body {
     transition: width 0.2s ease, opacity 0.2s ease;
 }
 
+.nav-search input:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.nav-search input::-webkit-search-decoration,
+.nav-search input::-webkit-search-cancel-button,
+.nav-search input::-webkit-search-results-button,
+.nav-search input::-webkit-search-results-decoration {
+    display: none;
+}
+
 .nav-search.search-open input {
     width: 120px;
     opacity: 1;

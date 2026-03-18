@@ -20,7 +20,10 @@
             <a href="newsletters.html" class="active">NEWSLETTERS</a>
         </div>
         <div class="nav-right">
-            <a href="#" id="adminNavBtn" class="btn-support">ADMIN</a>
+            <form class="nav-search" role="search" onsubmit="return false;">
+                <input type="search" placeholder="Search" aria-label="Search" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off">
+                <button type="submit" aria-label="Submit search"><i class="fas fa-search"></i></button>
+            </form>
         </div>
     </nav>
 
@@ -57,6 +60,7 @@
             <p id="subscriptionMessage" class="subscription-message"></p>
 
             <div class="footer-links">
+                <a href="#" id="adminNavBtn" class="btn-support">admin</a>
                 <a href="mailto:tamu.msfc@gmail.com">contact us</a>
                 <a href="index.html">home</a>
                 <a href="https://msfc.org/" target="_blank">national msfc</a>
