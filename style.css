@@ -89,6 +89,14 @@ body {
     align-items: center;
     justify-content: center;
     gap: 40px;
+    padding-left: 10px; /* nudges nav links slightly right for better centering */
+}
+
+@media (min-width: 769px) {
+    /* ensure the nav links appear centered between the logo and search icon */
+    .nav-center {
+        padding-left: 14px;
+    }
 }
 
 .nav-right {
