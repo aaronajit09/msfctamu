@@ -206,6 +206,151 @@ if (adminNavBtn) {
     });
 }
 
+// Search functionality
+const searchForm = document.querySelector('.nav-search');
+const searchInput = searchForm ? searchForm.querySelector('input') : null;
+
+function clearSearchHighlights() {
+    document.querySelectorAll('mark.search-highlight').forEach(mark => {
+        const parent = mark.parentNode;
+        if (parent) {
+            parent.replaceChild(document.createTextNode(mark.textContent), mark);
+            parent.normalize();
+        }
+    });
+    document.querySelectorAll('.search-info').forEach(el => el.remove());
+}
+
+function highlightQueryInText(root, query) {
+    const normalize = (str) => str.toLowerCase();
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escaped})`, 'gi');
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
+            const parentTag = node.parentNode && node.parentNode.nodeName;
+            if (!parentTag) return NodeFilter.FILTER_REJECT;
+            if (['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT'].includes(parentTag)) return NodeFilter.FILTER_REJECT;
+            if (!normalize(node.nodeValue).includes(normalize(query))) return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
+        }
+    });
+
+    let node;
+    let count = 0;
+    const nodes = [];
+    while ((node = walker.nextNode())) {
+        nodes.push(node);
+    }
+
+    nodes.forEach(textNode => {
+        const frag = document.createDocumentFragment();
+        const parts = textNode.nodeValue.split(regex);
+        parts.forEach(part => {
+            if (!part) return;
+            if (normalize(part) === normalize(query)) {
+                const mark = document.createElement('mark');
+                mark.className = 'search-highlight';
+                mark.textContent = part;
+                frag.appendChild(mark);
+                count++;
+            } else {
+                frag.appendChild(document.createTextNode(part));
+            }
+        });
+        textNode.parentNode.replaceChild(frag, textNode);
+    });
+
+    return count;
+}
+
+function runSearch(query) {
+    clearSearchHighlights();
+    if (!query) return;
+    query = query.trim();
+    if (!query) return;
+
+    const root = document.body;
+    const count = highlightQueryInText(root, query);
+
+    const container = document.querySelector('#eventsList') || document.querySelector('#newslettersList') || document.querySelector('main') || document.body;
+    const itemLabel = container.id === 'eventsList' ? 'events' : container.id === 'newslettersList' ? 'newsletters' : 'matches';
+
+    const updateSearchInfo = (containerEl, matchCount, queryText, label) => {
+        if (!containerEl) return;
+        let info = containerEl.querySelector('.search-info');
+        if (!info) {
+            info = document.createElement('p');
+            info.className = 'search-info';
+            containerEl.insertBefore(info, containerEl.firstChild);
+        }
+        if (matchCount === 0) {
+            info.textContent = `No ${label} match "${queryText}".`;
+        } else if (matchCount === 1) {
+            info.textContent = `1 ${label} matches "${queryText}".`;
+        } else {
+            info.textContent = `${matchCount} ${label} match "${queryText}".`;
+        }
+    };
+
+    updateSearchInfo(container, count, query, itemLabel);
+
+    if (count > 0) {
+        const firstMatch = document.querySelector('mark.search-highlight');
+        if (firstMatch) {
+            firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+}
+
+if (searchForm) {
+    const submitButton = searchForm.querySelector('button[type="submit"]');
+
+    function isSearchCollapsed() {
+        return searchForm && !searchForm.classList.contains('search-open');
+    }
+
+    searchForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+
+        // First tap expands the search input (magnifying glass behavior)
+        if (isSearchCollapsed()) {
+            searchForm.classList.add('search-open');
+            if (searchInput) searchInput.focus();
+            return;
+        }
+
+        if (searchInput) runSearch(searchInput.value);
+    });
+
+    if (submitButton) {
+        submitButton.addEventListener('click', (e) => {
+            if (isSearchCollapsed()) {
+                // Prevent form submission and expand search input instead
+                e.preventDefault();
+                searchForm.classList.add('search-open');
+                if (searchInput) searchInput.focus();
+            }
+        });
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (searchForm.classList.contains('search-open')) {
+                    searchForm.classList.remove('search-open');
+                    searchInput.blur();
+                    searchInput.value = '';
+                }
+
+                // clear highlights & info
+                clearSearchHighlights();
+            }
+        });
+    }
+}
+
 // Handle newsletter form submission
 if (newsletterForm) {
     const dropZone = document.getElementById('dropZone');
