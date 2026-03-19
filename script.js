@@ -66,10 +66,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Admin password (loaded from environment variable)
-const ADMIN_PASSWORD = 'msfc2024';
-
-// Supabase configuration
+// Supabase configuration (safe to include in front-end code)
 const supabaseUrl = 'https://txkkrcpcwgwgehogwisx.supabase.co';
 const supabaseKey = 'sb_publishable_CfWcrYO5PbZ15FdyLOItww_hOY6HpIA';
 
@@ -77,12 +74,59 @@ const supabaseKey = 'sb_publishable_CfWcrYO5PbZ15FdyLOItww_hOY6HpIA';
 const NEWSLETTERS_BUCKET = 'newsletters';
 const NEWSLETTER_COVERS_BUCKET = 'newsletter-covers';
 
+// --- Admin auth helpers ---
+// To support admin users, create a table in Supabase (e.g. "admins")
+// that stores each admin's `user_id` (UUID) or email.
+const ADMIN_TABLE = 'admin';
+
 let supabase = null;
 if (window.supabase) {
-    // Keys are now defined above
     if (supabaseUrl && supabaseKey) {
         supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
     }
+}
+
+async function getSession() {
+    if (!supabase) return null;
+    const { data } = await supabase.auth.getSession();
+    return data?.session ?? null;
+}
+
+async function getCurrentUser() {
+    const session = await getSession();
+    return session?.user ?? null;
+}
+
+async function isAdminUser(user) {
+    if (!user || !supabase) return false;
+
+    try {
+        // The Supabase REST API is case-sensitive for column names.
+        // The table currently uses `userid` (lowercase) in the UI, so query that.
+        const { data, error } = await supabase
+            .from(ADMIN_TABLE)
+            .select('id')
+            .eq('userid', user.id)
+            .limit(1)
+            .maybeSingle();
+
+        console.debug('Admin check', { userId: user.id, result: data, error });
+        if (!error && data) {
+            return true;
+        }
+    } catch (err) {
+        console.warn('Admin check skipped; ensure the admin table exists in Supabase.', err);
+    }
+
+    return false;
+}
+
+async function refreshAuthState() {
+    const user = await getCurrentUser();
+    const isAdmin = await isAdminUser(user);
+    localStorage.setItem('isAdmin', isAdmin ? 'true' : 'false');
+    updateUI();
+    return { user, isAdmin };
 }
 
 // DOM Elements
@@ -168,30 +212,58 @@ if (loginModal) {
 
 // Handle login form submission
 if (loginForm) {
-    loginForm.addEventListener('submit', (e) => {
+    loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const password = document.getElementById('password').value;
-        
-        if (password === ADMIN_PASSWORD) {
-            localStorage.setItem('isAdmin', 'true');
-            if (loginModal) {
-                loginModal.style.display = 'none';
-            }
-            updateUI();
-            // Redirect to admin page on successful login
-            window.location.href = 'admin.html';
-        } else {
-            alert('Invalid password');
+
+        if (!supabase) {
+            alert('Login not available. Please try again later.');
+            return;
         }
+
+        const email = document.getElementById('email')?.value.trim();
+        const password = document.getElementById('password')?.value;
+
+        if (!email || !password) {
+            alert('Please provide both email and password.');
+            return;
+        }
+
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+            console.error('Login error:', error);
+            const reason = error.message || error.error_description || error.error || 'Invalid email/password';
+            alert('Login failed: ' + reason + '\nPlease check your email and password.');
+            return;
+        }
+
+        const user = data?.user;
+        const isAdmin = await isAdminUser(user);
+        if (!isAdmin) {
+            await supabase.auth.signOut();
+            alert('Access denied. Please contact the site administrator.');
+            return;
+        }
+
+        localStorage.setItem('isAdmin', 'true');
+        if (loginModal) {
+            loginModal.style.display = 'none';
+        }
+        updateUI();
+
+        // Redirect to admin page on successful login
+        window.location.href = 'admin.html';
     });
 }
 
 // Handle Admin Nav Button
 if (adminNavBtn) {
-    adminNavBtn.addEventListener('click', (e) => {
+    adminNavBtn.addEventListener('click', async (e) => {
         e.preventDefault();
         if (isLoggedIn()) {
             // LOGOUT
+            if (supabase) {
+                await supabase.auth.signOut();
+            }
             localStorage.removeItem('isAdmin');
             updateUI();
             if (window.location.pathname.endsWith('admin.html')) {
@@ -210,6 +282,12 @@ if (adminNavBtn) {
 const searchForm = document.querySelector('.nav-search');
 const searchInput = searchForm ? searchForm.querySelector('input') : null;
 
+const searchCount = document.createElement('span');
+searchCount.className = 'search-count';
+if (searchForm) {
+    searchForm.appendChild(searchCount);
+}
+
 function clearSearchHighlights() {
     document.querySelectorAll('mark.search-highlight').forEach(mark => {
         const parent = mark.parentNode;
@@ -218,7 +296,10 @@ function clearSearchHighlights() {
             parent.normalize();
         }
     });
-    document.querySelectorAll('.search-info').forEach(el => el.remove());
+    if (searchForm) {
+        searchForm.classList.remove('has-count');
+        searchCount.textContent = '';
+    }
 }
 
 function highlightQueryInText(root, query) {
@@ -274,27 +355,10 @@ function runSearch(query) {
     const root = document.body;
     const count = highlightQueryInText(root, query);
 
-    const container = document.querySelector('#eventsList') || document.querySelector('#newslettersList') || document.querySelector('main') || document.body;
-    const itemLabel = container.id === 'eventsList' ? 'events' : container.id === 'newslettersList' ? 'newsletters' : 'matches';
-
-    const updateSearchInfo = (containerEl, matchCount, queryText, label) => {
-        if (!containerEl) return;
-        let info = containerEl.querySelector('.search-info');
-        if (!info) {
-            info = document.createElement('p');
-            info.className = 'search-info';
-            containerEl.insertBefore(info, containerEl.firstChild);
-        }
-        if (matchCount === 0) {
-            info.textContent = `No ${label} match "${queryText}".`;
-        } else if (matchCount === 1) {
-            info.textContent = `1 ${label} matches "${queryText}".`;
-        } else {
-            info.textContent = `${matchCount} ${label} match "${queryText}".`;
-        }
-    };
-
-    updateSearchInfo(container, count, query, itemLabel);
+    if (searchForm) {
+        searchCount.textContent = count > 0 ? `${count}` : '';
+        searchForm.classList.toggle('has-count', count > 0);
+    }
 
     if (count > 0) {
         const firstMatch = document.querySelector('mark.search-highlight');
@@ -776,7 +840,9 @@ async function linkLatestVolume() {
 }
 
 // Initialize the page
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await refreshAuthState();
+
     // Page Protection
     if (window.location.pathname.endsWith('/admin.html') && !isLoggedIn()) {
         alert('You must be logged in to view this page.');
